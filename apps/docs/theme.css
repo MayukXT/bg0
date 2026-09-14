@@ -1,0 +1,41 @@
+/* BG0 docs: match the product's dark shadcn theme. */
+:root[data-theme="dark"] {
+  --blume-background: #0a0a0a;
+  --blume-foreground: #ededed;
+  --blume-muted: #111111;
+  --blume-muted-foreground: #8f8f8f;
+  --blume-border: #242424;
+  --blume-accent: #5e9bff;
+  --blume-accent-foreground: #0a0a0a;
+  --blume-code-background: #111111;
+}
+
+:root {
+  --blume-radius: 0.75rem;
+}
+
+/* Keycaps: match the app's Kbd component in both modes. */
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.375rem;
+  min-width: 1.375rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--blume-border);
+  border-radius: 5px;
+  background: var(--blume-muted);
+  color: var(--blume-foreground);
+  font-family: var(--blume-font-mono);
+  font-size: 0.75rem;
+  line-height: 1;
+  box-shadow: 0 1px 0 var(--blume-border);
+  white-space: nowrap;
+}
+
+:root[data-theme="dark"] kbd {
+  background: #0a0a0a;
+  border-color: #2a2a2a;
+  color: #a3a3a3;
+  box-shadow: 0 1px 0 #2a2a2a;
+}

@@ -1,0 +1,420 @@
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * BG0 shadcn theme.
+ * :root is the light palette, .dark is the product default.
+ * Every color is a plain hex so the block can be copied into another app.
+ */
+:root {
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: #0a0a0a;
+  --primary-foreground: #ffffff;
+  --primary-gradient-from: #2e2e2e;
+  --primary-gradient-to: #0a0a0a;
+  --primary-highlight: rgba(255, 255, 255, 0.16);
+  --primary-shade: rgba(0, 0, 0, 0.4);
+  --secondary: #f4f4f4;
+  --secondary-foreground: #0a0a0a;
+  --secondary-gradient-from: #ffffff;
+  --secondary-gradient-to: #f3f3f3;
+  --muted: #f4f4f4;
+  --muted-foreground: #6b6b6b;
+  --faint-foreground: #9a9a9a;
+  --accent: #eaeaea;
+  --accent-foreground: #0a0a0a;
+  --destructive: #d94a3d;
+  --destructive-foreground: #ffffff;
+  --success: #1f9d5c;
+  --border: #e6e6e6;
+  --border-subtle: #efefef;
+  --input: #dcdcdc;
+  --ring: #0a0a0a;
+  --code: #111111;
+  --code-foreground: #d4d4d4;
+  --code-border: #242424;
+  --syntax-command: #f5c26b;
+  --syntax-url: #7db3ff;
+  --syntax-flag: #c792ea;
+  --syntax-string: #8fe9b6;
+  --syntax-ok: #3ecf8e;
+  --syntax-comment: #5e5e5e;
+  --checker: #e6e6e6;
+  --checker-alt: #f4f4f4;
+  --wipe: #5e9bff;
+  --radius: 0.75rem;
+  --shadow-elevated:
+    0 1px 2px rgba(0, 0, 0, 0.06), 0 24px 48px -24px rgba(0, 0, 0, 0.18);
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --card: #111111;
+  --card-foreground: #ededed;
+  --popover: #161616;
+  --popover-foreground: #ededed;
+  --primary: #ededed;
+  --primary-foreground: #111111;
+  --primary-gradient-from: #ffffff;
+  --primary-gradient-to: #e4e4e4;
+  --primary-highlight: #ffffff;
+  --primary-shade: rgba(0, 0, 0, 0.14);
+  --secondary: #161616;
+  --secondary-foreground: #ededed;
+  --secondary-gradient-from: #181818;
+  --secondary-gradient-to: #141414;
+  --muted: #181818;
+  --muted-foreground: #8f8f8f;
+  --faint-foreground: #5e5e5e;
+  --accent: #202020;
+  --accent-foreground: #ededed;
+  --destructive: #e5675c;
+  --destructive-foreground: #0a0a0a;
+  --success: #3ecf8e;
+  --border: #242424;
+  --border-subtle: #1e1e1e;
+  --input: #2a2a2a;
+  --ring: #5e9bff;
+  --code: #111111;
+  --code-foreground: #d4d4d4;
+  --code-border: #242424;
+  --checker: #1c1c1c;
+  --checker-alt: #141414;
+  --shadow-elevated:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 32px 64px -32px rgba(0, 0, 0, 0.8);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-faint-foreground: var(--faint-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-code: var(--code);
+  --color-code-foreground: var(--code-foreground);
+  --color-code-border: var(--code-border);
+  --color-syntax-command: var(--syntax-command);
+  --color-syntax-url: var(--syntax-url);
+  --color-syntax-flag: var(--syntax-flag);
+  --color-syntax-string: var(--syntax-string);
+  --color-syntax-ok: var(--syntax-ok);
+  --color-syntax-comment: var(--syntax-comment);
+  --color-wipe: var(--wipe);
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --shadow-elevated: var(--shadow-elevated);
+  --font-sans:
+    "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --font-mono:
+    "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+  --container-page: 1200px;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html,
+  body,
+  #app {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::selection {
+    background: var(--foreground);
+    color: var(--background);
+  }
+}
+
+@utility bg-checker {
+  background-color: var(--checker-alt);
+  background-image:
+    linear-gradient(45deg, var(--checker) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker) 75%);
+  background-size: 24px 24px;
+  background-position:
+    0 0,
+    0 12px,
+    12px -12px,
+    -12px 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+}
+
+/* ── Motion tokens (transitions.dev scale) ─────────────────────────── */
+:root {
+  --duration-stagger: 40ms;
+  --duration-micro: 80ms;
+  --duration-quick: 150ms;
+  --duration-fast: 250ms;
+  --duration-medium: 350ms;
+  --duration-slow: 400ms;
+  --duration-very-slow: 500ms;
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: ease-in-out;
+  --ease-out: ease-out;
+  --ease-linear: linear;
+  --ease-bounce: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --distance-micro: 4px;
+  --distance-base: 8px;
+  --scale-small: 0.98;
+  --blur-small: 2px;
+
+  /* Tabs sliding */
+  --tabs-dur: 250ms;
+  --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Icon swap */
+  --icon-swap-dur: 250ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+  /* Toast */
+  --toast-open: 350ms;
+  --toast-close: 250ms;
+  --toast-distance: 16px;
+  --toast-blur: 2px;
+  --toast-scale: 0.97;
+  --toast-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Shimmer text */
+  --shimmer-dur: 2000ms;
+  --shimmer-base: var(--muted-foreground);
+  --shimmer-highlight: var(--foreground);
+  --shimmer-band: 400%;
+  --shimmer-ease: linear;
+  /* Panel reveal, used for stage changes */
+  --panel-open-dur: 400ms;
+  --panel-translate-y: 8px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── Tabs sliding ──────────────────────────────────────────────────── */
+.t-tabs {
+  position: relative;
+}
+.t-tabs > [data-slot="tabs-trigger"] {
+  position: relative;
+  z-index: 1;
+  transition: color var(--tabs-dur) var(--tabs-ease);
+}
+.t-tabs-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  transform: translateX(0);
+  transition:
+    transform var(--tabs-dur) var(--tabs-ease),
+    width var(--tabs-dur) var(--tabs-ease);
+  will-change: transform, width;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ── Icon swap ─────────────────────────────────────────────────────── */
+.t-icon-swap {
+  position: relative;
+  display: inline-grid;
+}
+.t-icon-swap .t-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity var(--icon-swap-dur) var(--icon-swap-ease),
+    filter var(--icon-swap-dur) var(--icon-swap-ease),
+    transform var(--icon-swap-dur) var(--icon-swap-ease);
+  will-change: opacity, filter, transform;
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="a"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="b"] {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="b"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="a"] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+}
+
+/* ── Toast ─────────────────────────────────────────────────────────── */
+.t-toast {
+  opacity: 0;
+  transform: translateY(var(--toast-distance)) scale(var(--toast-scale));
+  filter: blur(var(--toast-blur));
+  will-change: transform, opacity, filter;
+  transition:
+    opacity var(--toast-close) var(--toast-ease),
+    transform var(--toast-close) var(--toast-ease),
+    filter var(--toast-close) var(--toast-ease);
+}
+.t-toast.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+  transition:
+    opacity var(--toast-open) var(--toast-ease),
+    transform var(--toast-open) var(--toast-ease),
+    filter var(--toast-open) var(--toast-ease);
+}
+
+/* ── Shimmer text ──────────────────────────────────────────────────── */
+.t-shimmer {
+  position: relative;
+  display: inline-block;
+  color: var(--shimmer-base);
+}
+.t-shimmer::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 40%,
+    var(--shimmer-highlight) 50%,
+    transparent 60%,
+    transparent 100%
+  );
+  background-size: var(--shimmer-band) 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: t-shimmer var(--shimmer-dur) var(--shimmer-ease) infinite;
+}
+@keyframes t-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0% 0;
+  }
+}
+
+/* ── Stage enter (panel reveal, mount only) ────────────────────────── */
+.t-stage {
+  animation: t-stage-in var(--panel-open-dur) var(--panel-ease) both;
+}
+@keyframes t-stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--panel-translate-y));
+    filter: blur(var(--panel-blur));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* ── Compare slider ────────────────────────────────────────────────── */
+.compare {
+  --wipe: 50;
+  --wipe-pos: calc(var(--wipe) * 1%);
+}
+.compare-source {
+  clip-path: inset(0 calc(100% - var(--wipe-pos)) 0 0);
+  transition: clip-path var(--duration-fast) var(--ease-smooth-out);
+}
+.compare-line {
+  left: var(--wipe-pos);
+  transition: left var(--duration-fast) var(--ease-smooth-out);
+}
+.compare-handle {
+  left: var(--wipe-pos);
+  transform: translate(-50%, -50%);
+  transition:
+    left var(--duration-fast) var(--ease-smooth-out),
+    scale var(--duration-quick) var(--ease-smooth-out);
+}
+.compare-fade {
+  transition: opacity var(--duration-quick) var(--ease-out);
+}
+.compare[data-view="original"] .compare-source,
+.compare[data-peek="true"] .compare-source {
+  clip-path: inset(0 0 0 0);
+}
+.compare[data-view="result"] .compare-source {
+  clip-path: inset(0 100% 0 0);
+}
+.compare:not([data-view="compare"]) .compare-fade,
+.compare[data-peek="true"] .compare-fade {
+  opacity: 0;
+  pointer-events: none;
+}
+.compare[data-dragging="true"] .compare-source,
+.compare[data-dragging="true"] .compare-line,
+.compare[data-instant="true"] .compare-source,
+.compare[data-instant="true"] .compare-line,
+.compare[data-instant="true"] .compare-handle,
+.compare[data-instant="true"] .compare-fade {
+  transition: none;
+}
+.compare[data-dragging="true"] .compare-handle {
+  scale: 1.08;
+  transition: scale var(--duration-quick) var(--ease-smooth-out);
+}

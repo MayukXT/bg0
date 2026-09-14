@@ -1,0 +1,75 @@
+---
+title: Browser library
+description: Add on-device background removal to your own web app with @bg0/browser.
+sidebar:
+  order: 3
+  icon: package
+---
+
+`@bg0/browser` is the engine behind bg0.dev. It loads the BiRefNet-lite ONNX model, runs it with WebGPU or WebAssembly, and returns a transparent PNG. No server, no API key.
+
+## Install
+
+```package-install
+npm i @bg0/browser
+```
+
+## Remove a background
+
+```ts
+import { removeBackground } from '@bg0/browser'
+
+const result = await removeBackground(file, {
+  quality: 'quality',
+  onProgress: ({ stage, progress, message }) => console.log(stage, progress, message),
+})
+
+const url = URL.createObjectURL(result.blob)
+```
+
+`file` is any `Blob`, such as a `File` from an input or a drop event. PNG, JPG, and WebP up to 40 MB are accepted.
+
+## Options
+
+| Option | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `quality` | `'fast' \| 'quality'` | `'fast'` | Mask smoothing level. `quality` costs a little time and gives cleaner edges |
+| `onProgress` | `(progress) => void` | | Called through the `preparing`, `downloading`, `processing`, and `finishing` stages |
+| `signal` | `AbortSignal` | | Cancel a run. The promise rejects with a `BackgroundRemovalError` |
+
+## Result
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `blob` | `Blob` | PNG with alpha |
+| `width`, `height` | `number` | Pixel size of the output |
+| `provider` | `'webgpu' \| 'wasm'` | Which backend ran the model |
+| `durationMs` | `number` | Wall time for the whole call |
+
+## Errors
+
+Every failure is a `BackgroundRemovalError` with a stable `code` and a message written for end users, so you can show it directly.
+
+```ts
+import { BackgroundRemovalError } from '@bg0/browser'
+
+try {
+  await removeBackground(file)
+} catch (error) {
+  if (error instanceof BackgroundRemovalError) toast(error.message)
+}
+```
+
+## Capabilities
+
+```ts
+import { getBrowserCapabilities } from '@bg0/browser'
+
+const { webgpu } = getBrowserCapabilities()
+```
+
+Use this to warn users on the WASM path that a large photo will take longer.
+
+## Model caching
+
+The model is fetched from the Hugging Face hub and kept in browser storage. Calls in the same page reuse the initialized model. After a reload, BG0 reuses the stored files but still initializes ONNX and uploads weights to WebGPU. Browsers may evict the files under storage pressure. `clearModelCache()` forces a download on the next call.

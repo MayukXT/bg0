@@ -1,0 +1,36 @@
+---
+title: Web app
+description: How bg0.dev works, what it accepts, and what to expect on first load.
+sidebar:
+  label: Overview
+---
+
+The web app at [bg0.dev](https://bg0.dev) is the whole product in one page. Drop an image, compare, download. There is no account, no upload, and no limit on how many images you process.
+
+## Input
+
+| Accepts | Limit |
+| --- | --- |
+| PNG, JPG, WebP | 40 MB per image |
+
+Drag a file anywhere on the page, paste an image from the clipboard, or choose one with the file picker. On a phone, the picker opens the camera roll.
+
+## First load
+
+The WebGPU model is roughly 94 MB and downloads on the first removal. It is stored in the browser cache, so later sessions normally read it from local storage instead of downloading it again. Reloading still requires ONNX initialization and copying weights to the GPU, which can take a few seconds. Private browsing, cleared site data, or browser storage eviction can trigger another download.
+
+## Compare view
+
+After processing you land on the compare view. The line splits the original on the left from the result on the right. Drag it with the pointer, slide it with the arrow keys, or hold <kbd>Space</kbd> to see the whole original. Use the Result and Original tabs to view either image on its own.
+
+## Output
+
+Downloads are PNG files with an alpha channel, named after the original with a `-bg0` suffix. Copy places the same PNG on the clipboard so you can paste it straight into a design tool or a chat.
+
+:::note
+Copying an image needs a secure page. That is always true on bg0.dev over HTTPS. On an insecure development origin, BG0 tells you to download instead.
+:::
+
+## Hardware
+
+BG0 prefers WebGPU and falls back to WebAssembly. A laptop with WebGPU removes a background in one to three seconds. The WASM path works everywhere but can take ten seconds or more on a large photo.

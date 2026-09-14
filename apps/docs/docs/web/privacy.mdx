@@ -1,0 +1,37 @@
+---
+title: Privacy
+description: What leaves your device when you use bg0.dev. Short answer, nothing you gave it.
+---
+
+## Your images
+
+Image bytes are read into browser memory, run through the model, and composited into a PNG, all on your device. Nothing is uploaded. Close the tab and the image is gone.
+
+## What the site does load
+
+- The web app itself, from bg0.dev.
+- The model weights, once, from the Hugging Face model hub. They are cached in the browser afterwards.
+
+## What the site never sends
+
+- Image pixels, thumbnails, or masks.
+- File names, file sizes, or image URLs.
+- Anything about the images you processed.
+
+## Anonymous analytics
+
+bg0.dev uses PostHog to count page routes and a small set of product actions:
+choosing an image, whether local removal succeeded, the browser engine used,
+downloading or copying a result, and using result views. Full URLs, image
+metadata, session recordings, automatic click capture, and person profiles are
+disabled. A random anonymous identifier is kept in local storage so visits can
+be counted without an account.
+
+## Verify it
+
+Open the browser's network panel and process an image. You will see the app, the
+one-time model download, and small PostHog event requests. You will never see an
+image sent over the network. The code is open source, so you can read the
+[browser package](https://github.com/opencoredev/bg0/tree/main/packages/browser) and
+the [analytics module](https://github.com/opencoredev/bg0/blob/main/apps/web/src/lib/analytics.ts)
+to confirm the same thing.

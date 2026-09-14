@@ -1,0 +1,19 @@
+{
+  "name": "docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "BG0_PRODUCT_URL=${BG0_PRODUCT_URL:-http://localhost:3000} blume dev --port 4321",
+    "build": "blume build",
+    "preview": "blume preview --port 4321",
+    "serve": "BG0_PRODUCT_URL=${BG0_PRODUCT_URL:-http://localhost:3000} blume build && blume preview --port 4321",
+    "lint": "echo skip",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "blume": "^1.6.5"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}

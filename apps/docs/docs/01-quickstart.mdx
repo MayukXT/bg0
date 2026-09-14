@@ -1,0 +1,32 @@
+---
+title: Quickstart
+description: Remove your first background locally in the browser.
+sidebar:
+  order: 1
+---
+
+<Steps>
+  <Step title="Open bg0.dev">
+    Go to [bg0.dev](https://bg0.dev). The first removal downloads the model into the browser cache. Later visits reuse those files, although the browser still needs a moment to initialize the model.
+  </Step>
+  <Step title="Drop an image">
+    Drag a PNG, JPG, or WebP anywhere on the page, paste one with <kbd>⌘V</kbd>, or press <kbd>⌘O</kbd> to open a file.
+  </Step>
+  <Step title="Compare">
+    Drag the line to compare before and after. Hold <kbd>Space</kbd> to peek at the original.
+  </Step>
+  <Step title="Save">
+    Press <kbd>⌘S</kbd> to download the PNG or <kbd>⌘C</kbd> to copy it to the clipboard. <kbd>Esc</kbd> clears the canvas for the next image.
+  </Step>
+</Steps>
+
+## Use it in your web app
+
+```ts
+import { removeBackground } from '@bg0/browser'
+
+const result = await removeBackground(file)
+const url = URL.createObjectURL(result.blob)
+```
+
+See [Browser library](/library) for the complete API.

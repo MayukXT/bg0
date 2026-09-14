@@ -1,0 +1,29 @@
+---
+title: Introduction
+description: BG0 removes image backgrounds locally in your browser. No uploads, accounts, API keys, or server inference.
+---
+
+BG0 is an open-source, browser-only background remover. Choose an image, remove its background on your device, and download a transparent PNG. Nothing is uploaded.
+
+<CardGroup cols={2}>
+  <Card title="Web app" href="/web" icon="image">
+    Drop an image at bg0.dev and download a transparent PNG. Nothing is uploaded.
+  </Card>
+  <Card title="Browser library" href="/library" icon="package">
+    Add on-device background removal to your own web app.
+  </Card>
+</CardGroup>
+
+## How it works
+
+BG0 runs [BiRefNet](https://github.com/ZhengPeng7/BiRefNet), a segmentation model that predicts an alpha mask for the subject of a photo. The mask is composited onto the original pixels to produce a PNG with a transparent background.
+
+The web app and `@bg0/browser` use a pinned BiRefNet-lite ONNX model. WebGPU is preferred, with WebAssembly as the compatibility fallback.
+
+## Privacy
+
+Image bytes never leave your browser. The web app has no upload step and no account. bg0.dev may record anonymous page routes and a few product actions, never image contents or metadata.
+
+## License
+
+BG0 is licensed under Apache 2.0. The model weights carry their own license, documented in the repository's third-party notices.
