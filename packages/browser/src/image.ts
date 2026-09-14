@@ -30,6 +30,40 @@ export async function decodeImage(input: Blob): Promise<ImageBitmap> {
   }
 }
 
+export interface MaskInspection {
+  valid: boolean
+  hasForegroundSignal: boolean
+}
+
+/**
+ * WebGPU can complete without throwing while returning a corrupt, flat mask on
+ * some browser/GPU combinations. Inspect the tensor before it reaches canvas
+ * compositing so callers can retry with the compatibility provider.
+ */
+export function inspectMask(
+  mask: Float32Array,
+  expectedPixels: number,
+): MaskInspection {
+  if (mask.length !== expectedPixels || mask.length === 0) {
+    return { valid: false, hasForegroundSignal: false }
+  }
+
+  let min = Number.POSITIVE_INFINITY
+  let max = Number.NEGATIVE_INFINITY
+  for (const value of mask) {
+    if (!Number.isFinite(value)) {
+      return { valid: false, hasForegroundSignal: false }
+    }
+    min = Math.min(min, value)
+    max = Math.max(max, value)
+  }
+
+  return {
+    valid: true,
+    hasForegroundSignal: max >= 0.05 && max - min >= 0.005,
+  }
+}
+
 export function maskToPng(
   image: ImageBitmap,
   mask: Float32Array,

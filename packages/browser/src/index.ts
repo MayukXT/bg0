@@ -4,7 +4,7 @@ import {
   isIndexedDbAvailable,
 } from './cache'
 import { BackgroundRemovalError, normalizeError } from './errors'
-import { decodeImage, maskToPng, validateImage } from './image'
+import { decodeImage, inspectMask, maskToPng, validateImage } from './image'
 
 export {
   BackgroundRemovalError,
@@ -61,7 +61,7 @@ type Engine = {
   provider: ExecutionProvider
 }
 
-let enginePromise: Promise<Engine> | undefined
+const enginePromises: Partial<Record<ExecutionProvider, Promise<Engine>>> = {}
 
 export function getBrowserCapabilities(): BrowserCapabilities {
   return {
@@ -71,7 +71,8 @@ export function getBrowserCapabilities(): BrowserCapabilities {
 }
 
 export function clearModelCache(): void {
-  enginePromise = undefined
+  enginePromises.webgpu = undefined
+  enginePromises.wasm = undefined
   void clearIndexedDbCache()
 }
 
@@ -92,7 +93,7 @@ export async function removeBackground(
     decodedImage = image
     throwIfCancelled(options.signal)
 
-    const engine = await getEngine((progress) => {
+    let engine = await getPreferredEngine((progress) => {
       notify({
         stage: 'downloading',
         progress: 0.08 + progress * 0.58,
@@ -108,22 +109,46 @@ export async function removeBackground(
     })
     const { RawImage } = await import('@huggingface/transformers')
     const source = await RawImage.fromBlob(input)
-    const processed = await engine.processor(source)
-    const pixelValues = processed.pixel_values
-    if (!pixelValues) throw new Error('Image preprocessing failed')
-    const output = await engine.model({ input_image: pixelValues })
-    const tensor = output.logits ?? output.output_image
-    if (!tensor) throw new Error('The model returned no alpha mask')
-    const alpha = (output.logits ? tensor.sigmoid() : tensor).data
-    if (!(alpha instanceof Float32Array))
+    let inference = await runInference(engine, source)
+
+    if (
+      engine.provider === 'webgpu' &&
+      (!inference.inspection.valid || !inference.inspection.hasForegroundSignal)
+    ) {
+      throwIfCancelled(options.signal)
+      notify({
+        stage: 'downloading',
+        progress: 0.74,
+        message: 'Switching to compatibility mode…',
+      })
+      engine = await getEngine('wasm', (progress) => {
+        notify({
+          stage: 'downloading',
+          progress: 0.74 + progress * 0.14,
+          message: 'Preparing compatibility mode…',
+        })
+      })
+      throwIfCancelled(options.signal)
+      notify({
+        stage: 'processing',
+        progress: 0.89,
+        message: 'Retrying background removal…',
+      })
+      inference = await runInference(engine, source)
+    }
+
+    if (!inference.inspection.valid) {
       throw new Error('The model returned an invalid alpha mask')
+    }
 
     notify({ stage: 'finishing', progress: 0.92, message: 'Finishing edges…' })
-    const maskHeight = tensor.dims.at(-2)
-    const maskWidth = tensor.dims.at(-1)
-    if (!maskWidth || !maskHeight)
-      throw new Error('The model returned an invalid mask shape')
-    const blob = await maskToPng(image, alpha, maskWidth, maskHeight, quality)
+    const blob = await maskToPng(
+      image,
+      inference.alpha,
+      inference.maskWidth,
+      inference.maskHeight,
+      quality,
+    )
     notify({ stage: 'finishing', progress: 1, message: 'Background removed' })
 
     return {
@@ -141,15 +166,70 @@ export async function removeBackground(
   }
 }
 
-async function getEngine(
+async function getPreferredEngine(
   onDownload: (progress: number) => void,
 ): Promise<Engine> {
-  if (!enginePromise) enginePromise = loadEngine(onDownload)
+  const preferred: ExecutionProvider = getBrowserCapabilities().webgpu
+    ? 'webgpu'
+    : 'wasm'
   try {
-    return await enginePromise
+    return await getEngine(preferred, onDownload)
   } catch (error) {
-    enginePromise = undefined
+    if (preferred === 'webgpu') {
+      try {
+        return await getEngine('wasm', onDownload)
+      } catch (fallbackError) {
+        throw modelLoadError(fallbackError)
+      }
+    }
+    throw modelLoadError(error)
+  }
+}
+
+async function getEngine(
+  provider: ExecutionProvider,
+  onDownload: (progress: number) => void,
+): Promise<Engine> {
+  if (!enginePromises[provider]) {
+    enginePromises[provider] = loadEngine(provider, onDownload)
+  }
+  try {
+    return await enginePromises[provider]
+  } catch (error) {
+    enginePromises[provider] = undefined
     throw error
+  }
+}
+
+function modelLoadError(error: unknown) {
+  return new BackgroundRemovalError(
+    'model-load-failed',
+    'The local model could not be loaded. Check your connection and try again.',
+    { cause: error },
+  )
+}
+
+async function runInference(engine: Engine, source: unknown) {
+  const processed = await engine.processor(source)
+  const pixelValues = processed.pixel_values
+  if (!pixelValues) throw new Error('Image preprocessing failed')
+  const output = await engine.model({ input_image: pixelValues })
+  const tensor = output.logits ?? output.output_image
+  if (!tensor) throw new Error('The model returned no alpha mask')
+  const alpha = (output.logits ? tensor.sigmoid() : tensor).data
+  if (!(alpha instanceof Float32Array)) {
+    throw new Error('The model returned an invalid alpha mask')
+  }
+  const maskHeight = tensor.dims.at(-2)
+  const maskWidth = tensor.dims.at(-1)
+  if (!maskWidth || !maskHeight) {
+    throw new Error('The model returned an invalid mask shape')
+  }
+  return {
+    alpha,
+    maskWidth,
+    maskHeight,
+    inspection: inspectMask(alpha, maskWidth * maskHeight),
   }
 }
 
@@ -219,6 +299,7 @@ function createDownloadTracker(onDownload: (progress: number) => void) {
 }
 
 async function loadEngine(
+  provider: ExecutionProvider,
   onDownload: (progress: number) => void,
 ): Promise<Engine> {
   const { AutoModel, AutoProcessor, env } = await import(
@@ -243,34 +324,13 @@ async function loadEngine(
     progress_callback: progressCallback,
   })) as unknown as ProcessorRunner
 
-  const preferred: ExecutionProvider = getBrowserCapabilities().webgpu
-    ? 'webgpu'
-    : 'wasm'
-  try {
-    const model = (await AutoModel.from_pretrained(MODEL_ID, {
-      revision: MODEL_REVISION,
-      device: preferred,
-      dtype: preferred === 'webgpu' ? 'fp16' : 'fp32',
-      progress_callback: progressCallback,
-    })) as unknown as ModelRunner
-    return { model, processor, provider: preferred }
-  } catch (error) {
-    if (preferred === 'wasm') {
-      throw new BackgroundRemovalError(
-        'model-load-failed',
-        'The local model could not be loaded. Check your connection and try again.',
-        { cause: error },
-      )
-    }
-
-    const model = (await AutoModel.from_pretrained(MODEL_ID, {
-      revision: MODEL_REVISION,
-      device: 'wasm',
-      dtype: 'fp32',
-      progress_callback: progressCallback,
-    })) as unknown as ModelRunner
-    return { model, processor, provider: 'wasm' }
-  }
+  const model = (await AutoModel.from_pretrained(MODEL_ID, {
+    revision: MODEL_REVISION,
+    device: provider,
+    dtype: provider === 'webgpu' ? 'fp16' : 'fp32',
+    progress_callback: progressCallback,
+  })) as unknown as ModelRunner
+  return { model, processor, provider }
 }
 
 function throwIfCancelled(signal?: AbortSignal): void {
