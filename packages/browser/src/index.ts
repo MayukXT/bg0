@@ -42,6 +42,7 @@ export interface BrowserCapabilities {
 
 const MODEL_ID = 'studioludens/birefnet-lite-512'
 const MODEL_REVISION = '4a3c40c36c94093cc1e724d9ea428b8fa4b57dc7'
+const MODEL_BASE_URL = `https://huggingface.co/${MODEL_ID}/resolve/${MODEL_REVISION}`
 const WEBGPU_FAILURE_KEY = `bg0:webgpu-failure:${MODEL_REVISION}`
 // Size of onnx/model.onnx at the pinned revision, used to weight progress
 // when a response arrives without a Content-Length.
@@ -101,11 +102,15 @@ export async function removeBackground(
     decodedImage = image
     throwIfCancelled(options.signal)
 
-    let engine = await getPreferredEngine((progress) => {
+    const preferredProvider = getPreferredProvider()
+    const modelIsCached = await isModelCached(preferredProvider)
+    let engine = await getPreferredEngine(preferredProvider, (progress) => {
       notify({
-        stage: 'downloading',
+        stage: modelIsCached ? 'preparing' : 'downloading',
         progress: 0.08 + progress * 0.58,
-        message: 'Downloading local model…',
+        message: modelIsCached
+          ? 'Loading cached model…'
+          : 'Downloading local model…',
       })
     })
     throwIfCancelled(options.signal)
@@ -176,10 +181,9 @@ export async function removeBackground(
 }
 
 async function getPreferredEngine(
+  preferred: ExecutionProvider,
   onDownload: (progress: number) => void,
 ): Promise<Engine> {
-  const preferred: ExecutionProvider =
-    getBrowserCapabilities().webgpu && canTryWebgpu() ? 'webgpu' : 'wasm'
   try {
     return await getEngine(preferred, onDownload)
   } catch (error) {
@@ -193,6 +197,26 @@ async function getPreferredEngine(
     }
     throw modelLoadError(error)
   }
+}
+
+function getPreferredProvider(): ExecutionProvider {
+  return getBrowserCapabilities().webgpu && canTryWebgpu() ? 'webgpu' : 'wasm'
+}
+
+async function isModelCached(provider: ExecutionProvider): Promise<boolean> {
+  const filename = provider === 'webgpu' ? 'model_fp16.onnx' : 'model.onnx'
+  const url = `${MODEL_BASE_URL}/onnx/${filename}`
+  try {
+    if (typeof caches !== 'undefined') {
+      return Boolean(await (await caches.open('transformers-cache')).match(url))
+    }
+    if (isIndexedDbAvailable()) {
+      return Boolean(await createIndexedDbCache().match(url))
+    }
+  } catch {
+    // A blocked cache should not prevent local inference.
+  }
+  return false
 }
 
 function canTryWebgpu(): boolean {
