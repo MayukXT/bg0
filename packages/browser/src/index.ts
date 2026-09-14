@@ -62,6 +62,7 @@ type Engine = {
 }
 
 const enginePromises: Partial<Record<ExecutionProvider, Promise<Engine>>> = {}
+let webgpuUsableForSession = true
 
 export function getBrowserCapabilities(): BrowserCapabilities {
   return {
@@ -73,6 +74,7 @@ export function getBrowserCapabilities(): BrowserCapabilities {
 export function clearModelCache(): void {
   enginePromises.webgpu = undefined
   enginePromises.wasm = undefined
+  webgpuUsableForSession = true
   void clearIndexedDbCache()
 }
 
@@ -115,6 +117,7 @@ export async function removeBackground(
       engine.provider === 'webgpu' &&
       (!inference.inspection.valid || !inference.inspection.hasForegroundSignal)
     ) {
+      webgpuUsableForSession = false
       throwIfCancelled(options.signal)
       notify({
         stage: 'downloading',
@@ -169,9 +172,10 @@ export async function removeBackground(
 async function getPreferredEngine(
   onDownload: (progress: number) => void,
 ): Promise<Engine> {
-  const preferred: ExecutionProvider = getBrowserCapabilities().webgpu
-    ? 'webgpu'
-    : 'wasm'
+  const preferred: ExecutionProvider =
+    getBrowserCapabilities().webgpu && webgpuUsableForSession
+      ? 'webgpu'
+      : 'wasm'
   try {
     return await getEngine(preferred, onDownload)
   } catch (error) {
