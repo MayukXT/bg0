@@ -42,6 +42,7 @@ export interface BrowserCapabilities {
 
 const MODEL_ID = 'studioludens/birefnet-lite-512'
 const MODEL_REVISION = '4a3c40c36c94093cc1e724d9ea428b8fa4b57dc7'
+const WEBGPU_FAILURE_KEY = `bg0:webgpu-failure:${MODEL_REVISION}`
 // Size of onnx/model.onnx at the pinned revision, used to weight progress
 // when a response arrives without a Content-Length.
 const MODEL_BYTES = 191_877_254
@@ -75,6 +76,11 @@ export function clearModelCache(): void {
   enginePromises.webgpu = undefined
   enginePromises.wasm = undefined
   webgpuUsableForSession = true
+  try {
+    localStorage.removeItem(WEBGPU_FAILURE_KEY)
+  } catch {
+    // Storage can be unavailable in privacy modes. The in-memory reset remains useful.
+  }
   void clearIndexedDbCache()
 }
 
@@ -117,7 +123,7 @@ export async function removeBackground(
       engine.provider === 'webgpu' &&
       (!inference.inspection.valid || !inference.inspection.hasForegroundSignal)
     ) {
-      webgpuUsableForSession = false
+      rememberWebgpuFailure()
       throwIfCancelled(options.signal)
       notify({
         stage: 'downloading',
@@ -173,13 +179,12 @@ async function getPreferredEngine(
   onDownload: (progress: number) => void,
 ): Promise<Engine> {
   const preferred: ExecutionProvider =
-    getBrowserCapabilities().webgpu && webgpuUsableForSession
-      ? 'webgpu'
-      : 'wasm'
+    getBrowserCapabilities().webgpu && canTryWebgpu() ? 'webgpu' : 'wasm'
   try {
     return await getEngine(preferred, onDownload)
   } catch (error) {
     if (preferred === 'webgpu') {
+      rememberWebgpuFailure()
       try {
         return await getEngine('wasm', onDownload)
       } catch (fallbackError) {
@@ -187,6 +192,24 @@ async function getPreferredEngine(
       }
     }
     throw modelLoadError(error)
+  }
+}
+
+function canTryWebgpu(): boolean {
+  if (!webgpuUsableForSession) return false
+  try {
+    return localStorage.getItem(WEBGPU_FAILURE_KEY) !== navigator.userAgent
+  } catch {
+    return true
+  }
+}
+
+function rememberWebgpuFailure(): void {
+  webgpuUsableForSession = false
+  try {
+    localStorage.setItem(WEBGPU_FAILURE_KEY, navigator.userAgent)
+  } catch {
+    // The current session still avoids repeating a known-bad WebGPU run.
   }
 }
 
