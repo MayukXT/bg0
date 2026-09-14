@@ -5,11 +5,11 @@
   "rewrites": [
     {
       "source": "/docs",
-      "destination": "https://bg0-docs-opencoredev.vercel.app/"
+      "destination": "https://docs-origin.bg0.dev/"
     },
     {
       "source": "/docs/:path*",
-      "destination": "https://bg0-docs-opencoredev.vercel.app/:path*"
+      "destination": "https://docs-origin.bg0.dev/:path*"
     }
   ]
 }
