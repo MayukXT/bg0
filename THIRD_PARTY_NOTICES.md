@@ -12,10 +12,4 @@ MIT licensed. Source, model card, attribution, limitations, and citation:
 The model weights are not included in this repository. Their original license
 continues to apply when a browser downloads and caches them.
 
-## Browser test photo
-
-`.agents/skills/test-bg0-web/fixtures/person.jpg` is Pexels photo 5965592 and is
-used only for local test automation. It is available under the Pexels license:
-https://www.pexels.com/license/
-
 Runtime dependencies retain the licenses declared by their respective packages.

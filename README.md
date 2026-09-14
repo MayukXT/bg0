@@ -56,10 +56,10 @@ and useful errors. Application code does not depend on ONNX internals.
 | `apps/web` | TanStack Start site and anonymous local remover |
 | `apps/docs` | Blume documentation served at `bg0.dev/docs` |
 | `packages/browser` | Reusable WebGPU/WASM inference and PNG output |
-| `docs/architecture.md` | Runtime, privacy, and deployment boundaries |
+| `ARCHITECTURE.md` | Runtime, privacy, and deployment boundaries |
 
 No backend is needed for background removal. See
-[`docs/architecture.md`](docs/architecture.md) for the complete data flow.
+[`ARCHITECTURE.md`](ARCHITECTURE.md) for the complete data flow.
 
 ## Contributing
 
@@ -69,6 +69,6 @@ and run the root checks before opening a pull request.
 
 ## License
 
-BG0 source is licensed under [Apache License 2.0](LICENSE). Model weights and test
-fixtures retain the licenses listed in
+BG0 source is licensed under [Apache License 2.0](LICENSE). Model weights retain
+the licenses listed in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

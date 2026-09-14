@@ -1,4 +1,5 @@
 node_modules/
+.agents/
 .turbo/
 .output/
 dist/

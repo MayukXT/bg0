@@ -23,7 +23,7 @@ BG0, choose an image, process it on-device, and download a transparent PNG.
 - `packages/browser`: model caching, WebGPU/WASM selection, BiRefNet-lite
   inference, mask postprocessing, and PNG output.
 
-Read `docs/architecture.md` before changing image-data, analytics, model-hosting,
+Read `ARCHITECTURE.md` before changing image-data, analytics, model-hosting,
 or deployment boundaries. Treat code and configuration as source of truth.
 
 ## Working rules
@@ -41,9 +41,7 @@ or deployment boundaries. Treat code and configuration as source of truth.
 
 ## Verification
 
-Read `.agents/skills/test-bg0-web/SKILL.md` before changing or testing the web app,
-docs, or browser package. Run narrow checks while iterating, then root lint,
-typecheck, test, and build.
+Run narrow checks while iterating, then root lint, typecheck, test, and build.
 
 A rendered page or successful typecheck does not prove an interaction. Exercise
 the affected user action, inspect client and server errors, and retain reviewable
