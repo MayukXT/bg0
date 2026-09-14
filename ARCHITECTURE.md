@@ -44,6 +44,12 @@ metadata. BG0 may collect coarse product events such as a removal completing,
 but those events must not contain filenames, dimensions, sizes, URLs, pixels, or
 other information about the image.
 
+PostHog survey submissions are restricted in code to the result-quality rating
+choices and predefined failure reasons. Survey configuration must not add free
+text or response choices outside that allowlist. Exception reports use
+controlled error categories and only same-origin JavaScript source locations;
+arbitrary exception messages and stack text stay in the browser.
+
 ## Model cache
 
 On HTTPS, Transformers.js uses the browser Cache API. Development origins that
@@ -60,4 +66,6 @@ private browsing, or clearing site data can require another download.
   `@bg0/browser`.
 
 The deployed application needs no secret environment variables and performs no
-server-side image processing.
+server-side image processing. Production builds can use a PostHog personal API
+key to upload private source maps; that build-only credential is never included
+in the application bundle or runtime.

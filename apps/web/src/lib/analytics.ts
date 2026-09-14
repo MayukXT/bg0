@@ -1,4 +1,9 @@
-import type { CaptureResult, PostHog } from 'posthog-js'
+import type { PostHog } from 'posthog-js'
+import {
+  createReportableError,
+  type ReportableErrorContext,
+  sanitizeCapture,
+} from './analytics-privacy'
 
 const POSTHOG_KEY = 'phc_wVUY4kf7cB9GCtKztaQ4dk6ooYU8QaagC88breDYcgaj'
 const POSTHOG_HOST = 'https://us.i.posthog.com'
@@ -13,29 +18,32 @@ type Feature =
 
 let clientPromise: Promise<PostHog | null> | null = null
 
-function withoutUrls(properties: CaptureResult['properties'] | undefined) {
-  if (!properties) return undefined
-  const sanitized = { ...properties }
-  delete sanitized.$current_url
-  delete sanitized.$referrer
-  delete sanitized.$initial_current_url
-  delete sanitized.$initial_referrer
-  return sanitized
+function captureControlledException(
+  client: PostHog,
+  error: unknown,
+  context: ReportableErrorContext,
+) {
+  client.captureException(
+    createReportableError(error, context, window.location.origin),
+    context,
+  )
 }
 
-function stripUrls(capture: CaptureResult | null) {
-  if (!capture) return null
-  return {
-    ...capture,
-    properties: withoutUrls(capture.properties) ?? {},
-    $set: withoutUrls(capture.$set),
-    $set_once: withoutUrls(capture.$set_once),
-  }
+function registerUnhandledErrorTracking(client: PostHog) {
+  window.addEventListener('error', (event) => {
+    captureControlledException(client, event.error, { area: 'unhandled_error' })
+  })
+  window.addEventListener('unhandledrejection', (event) => {
+    captureControlledException(client, event.reason, {
+      area: 'unhandled_rejection',
+    })
+  })
 }
 
 function analyticsEnabled() {
   if (typeof window === 'undefined') return false
   return (
+    import.meta.env.VITE_POSTHOG_ENABLED === 'true' ||
     window.location.hostname === 'bg0.dev' ||
     window.location.hostname === 'www.bg0.dev'
   )
@@ -53,13 +61,15 @@ function getClient(): Promise<PostHog | null> {
           capture_pageleave: true,
           capture_pageview: false,
           capture_performance: false,
+          capture_exceptions: false,
           disable_session_recording: true,
-          disable_surveys: true,
-          advanced_disable_feature_flags: true,
+          disable_surveys: false,
+          advanced_only_evaluate_survey_feature_flags: true,
           person_profiles: 'never',
           persistence: 'localStorage',
-          before_send: stripUrls,
+          before_send: sanitizeCapture,
         })
+        registerUnhandledErrorTracking(posthog)
         return posthog
       })
       .catch(() => null)
@@ -112,4 +122,16 @@ export function captureResultDownloaded(provider: 'wasm' | 'webgpu') {
 
 export function captureFeatureUsed(feature: Feature) {
   capture('feature_used', { feature })
+}
+
+export function captureAppException(
+  error: unknown,
+  context: Extract<
+    ReportableErrorContext,
+    { area: 'background_removal' | 'route' }
+  >,
+) {
+  void getClient().then((client) =>
+    client ? captureControlledException(client, error, context) : undefined,
+  )
 }

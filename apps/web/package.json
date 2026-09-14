@@ -10,6 +10,7 @@
     "generate-routes": "tsr generate",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "bun test",
     "format": "biome format --write src vite.config.ts",
     "lint": "biome lint src vite.config.ts",
     "check": "biome check src vite.config.ts",
@@ -38,6 +39,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.13",
+    "@posthog/rollup-plugin": "^1.6.0",
     "@tanstack/devtools-vite": "latest",
     "@tanstack/router-cli": "^1.132.0",
     "@types/node": "^22.10.2",

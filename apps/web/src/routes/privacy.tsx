@@ -54,6 +54,14 @@ function Privacy() {
         advertising, fingerprinting, and automatic click capture are disabled.
       </p>
       <p>
+        We also use PostHog to collect multiple-choice survey answers you choose
+        to submit and to report app errors. Surveys do not accept free text.
+        Error reports include a controlled error category and safe application
+        code locations, without the original error text, image URLs, image
+        contents, or image metadata. Survey responses and error reports use the
+        same anonymous identifier as the analytics above.
+      </p>
+      <p>
         PostHog stores a random anonymous identifier in local storage so visits
         can be counted without an account. The model cache also uses browser
         storage and only holds model files.
