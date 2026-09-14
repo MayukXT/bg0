@@ -3,10 +3,13 @@
   "framework": "tanstack-start",
   "installCommand": "bunx bun@1.4.2 install --frozen-lockfile",
   "rewrites": [
-    { "source": "/docs", "destination": "https://bg0-docs.vercel.app/" },
+    {
+      "source": "/docs",
+      "destination": "https://bg0-docs-opencoredev.vercel.app/"
+    },
     {
       "source": "/docs/:path*",
-      "destination": "https://bg0-docs.vercel.app/:path*"
+      "destination": "https://bg0-docs-opencoredev.vercel.app/:path*"
     }
   ]
 }
