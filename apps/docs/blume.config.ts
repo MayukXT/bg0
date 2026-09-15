@@ -18,7 +18,7 @@ export default defineConfig({
   description:
     'Private background removal in your browser. No uploads, accounts, or server-side inference.',
   logo: { image: '/logo.svg', text: 'bg0', href: productUrl },
-  github: { owner: 'bg0-dev', repo: 'bg0', dir: 'apps/docs' },
+  github: { owner: 'opencoredev', repo: 'bg0', dir: 'apps/docs' },
   content: { root: 'docs' },
   navigation: {
     repo: true,
