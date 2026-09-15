@@ -2,6 +2,7 @@ import { createFileRoute, useLoaderData } from '@tanstack/react-router'
 import { Check } from 'lucide-react'
 import { type ComponentType, useEffect, useState } from 'react'
 
+import { ComparePreview } from '#/components/compare-preview'
 import { GitHubIcon } from '#/components/icons'
 import { Button } from '#/components/ui/button'
 import { Card, CardDescription, CardTitle } from '#/components/ui/card'
@@ -100,8 +101,8 @@ function Home() {
               <StageCard
                 title="Compare"
                 keys={['Space', '←', '→']}
-                description="Hold Space to peek at the original. Arrows slide the wipe. Nothing to click."
-                mobileDescription="Drag the line. Press and hold to see the original."
+                description="Drag the line or click anywhere. Hold Space to see the original; use arrows for fine control."
+                mobileDescription="Tap or drag anywhere to compare before and after."
                 className="order-first sm:order-none"
               >
                 <ComparePreview />
@@ -362,70 +363,6 @@ function DropPreview() {
       >
         <path d="M2 1l14 9-6 1.5L13.5 18 10 19.5 6.5 13 2 16z" />
       </svg>
-    </PreviewFrame>
-  )
-}
-
-function ComparePreview() {
-  return (
-    <PreviewFrame className="bg-checker">
-      <img
-        src="/samples/cat-bg0.webp"
-        alt="The same cat with its background removed"
-        width={768}
-        height={512}
-        loading="lazy"
-        className="absolute inset-0 size-full object-cover"
-      />
-      <img
-        src="/samples/cat.webp"
-        alt=""
-        width={768}
-        height={512}
-        loading="lazy"
-        className="absolute inset-0 size-full object-cover [clip-path:inset(0_50%_0_0)]"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-wipe"
-      />
-      <div className="absolute top-1/2 left-1/2 flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-[3px] rounded-full bg-primary text-primary-foreground shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
-        <svg
-          width="5"
-          height="9"
-          viewBox="0 0 6 10"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M5 1 1 5l4 4" />
-        </svg>
-        <svg
-          width="5"
-          height="9"
-          viewBox="0 0 6 10"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="m1 1 4 4-4 4" />
-        </svg>
-      </div>
-      <span className="absolute top-2.5 left-2.5 hidden rounded bg-black/55 px-1.5 py-[3px] font-mono text-[10px] tracking-[0.08em] text-white sm:block">
-        BEFORE
-      </span>
-      <span className="absolute top-2.5 right-2.5 hidden rounded bg-black/55 px-1.5 py-[3px] font-mono text-[10px] tracking-[0.08em] text-white sm:block">
-        AFTER
-      </span>
-      <span className="absolute right-2.5 bottom-2.5 hidden rounded bg-black/55 px-1.5 py-[3px] font-mono text-[10px] text-white/70 sm:block">
-        1.8s · WebGPU
-      </span>
     </PreviewFrame>
   )
 }
