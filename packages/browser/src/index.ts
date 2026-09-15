@@ -11,6 +11,7 @@ import {
   prepareImageForInference,
   validateImage,
 } from './image'
+import { createMaskRefinement } from './refinement'
 import {
   canUseOnnxWebGpu,
   shouldUseSingleThreadedWasm,
@@ -179,6 +180,23 @@ export async function removeBackground(
       throw new Error('The model returned an invalid alpha mask')
     }
 
+    const refinement = await createMaskRefinement({
+      quality,
+      source,
+      outputWidth: preparedImage.sourceWidth,
+      outputHeight: preparedImage.sourceHeight,
+      base: inference,
+      signal: options.signal,
+      onRefining: () => {
+        notify({
+          stage: 'processing',
+          progress: 0.84,
+          message: 'Refining fine details…',
+        })
+      },
+      infer: (croppedSource) => runInference(engine, croppedSource),
+    })
+
     notify({ stage: 'finishing', progress: 0.92, message: 'Finishing edges…' })
     const image = await decodeImage(input)
     decodedImage = image
@@ -188,6 +206,7 @@ export async function removeBackground(
       inference.maskWidth,
       inference.maskHeight,
       quality,
+      refinement,
     )
     notify({ stage: 'finishing', progress: 1, message: 'Background removed' })
 
