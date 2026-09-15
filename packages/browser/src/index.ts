@@ -78,7 +78,14 @@ type Engine = {
   provider: ExecutionProvider
 }
 
-const enginePromises: Partial<Record<ExecutionProvider, Promise<Engine>>> = {}
+type EngineProgress = { progress: number; initializing: boolean }
+type EngineLoad = {
+  promise: Promise<Engine>
+  listeners: Set<(progress: number, initializing: boolean) => void>
+  progress?: EngineProgress
+}
+
+const engineLoads: Partial<Record<ExecutionProvider, EngineLoad>> = {}
 let webgpuUsableForSession = true
 
 export function getBrowserCapabilities(): BrowserCapabilities {
@@ -92,8 +99,8 @@ export function getBrowserCapabilities(): BrowserCapabilities {
 }
 
 export function clearModelCache(): void {
-  enginePromises.webgpu = undefined
-  enginePromises.wasm = undefined
+  engineLoads.webgpu = undefined
+  engineLoads.wasm = undefined
   webgpuUsableForSession = true
   try {
     localStorage.removeItem(WEBGPU_FAILURE_KEY)
@@ -101,6 +108,18 @@ export function clearModelCache(): void {
     // Storage can be unavailable in privacy modes. The in-memory reset remains useful.
   }
   void clearIndexedDbCache()
+}
+
+/**
+ * Download and initialize the model before the first image is selected.
+ * Concurrent calls share the same initialization work with removeBackground.
+ */
+export async function prepareBackgroundRemoval(): Promise<ExecutionProvider> {
+  const engine = await getPreferredEngine(
+    getPreferredProvider(),
+    () => undefined,
+  )
+  return engine.provider
 }
 
 export async function removeBackground(
@@ -299,14 +318,44 @@ async function getEngine(
   provider: ExecutionProvider,
   onDownload: (progress: number, initializing: boolean) => void,
 ): Promise<Engine> {
-  if (!enginePromises[provider]) {
-    enginePromises[provider] = loadEngine(provider, onDownload)
+  let load = engineLoads[provider]
+  if (!load) {
+    const listeners: EngineLoad['listeners'] = new Set()
+    let currentLoad: EngineLoad
+    const promise = loadEngine(provider, (progress, initializing) => {
+      if (engineLoads[provider] !== currentLoad) return
+      currentLoad.progress = { progress, initializing }
+      for (const listener of currentLoad.listeners) {
+        notifyEngineProgress(listener, currentLoad.progress)
+      }
+    })
+    currentLoad = { promise, listeners }
+    load = currentLoad
+    engineLoads[provider] = load
   }
+
+  load.listeners.add(onDownload)
   try {
-    return await enginePromises[provider]
+    if (load.progress) notifyEngineProgress(onDownload, load.progress)
+    const engine = await load.promise
+    if (engineLoads[provider] === load) load.progress = undefined
+    return engine
   } catch (error) {
-    enginePromises[provider] = undefined
+    if (engineLoads[provider] === load) engineLoads[provider] = undefined
     throw error
+  } finally {
+    load.listeners.delete(onDownload)
+  }
+}
+
+function notifyEngineProgress(
+  listener: (progress: number, initializing: boolean) => void,
+  progress: EngineProgress,
+): void {
+  try {
+    listener(progress.progress, progress.initializing)
+  } catch {
+    // Progress reporting is advisory and must not interrupt model loading.
   }
 }
 
