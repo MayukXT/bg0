@@ -125,6 +125,33 @@ function fileFromClipboard(data: DataTransfer | null): File | null {
   return null
 }
 
+function isFileTransfer(data: DataTransfer): boolean {
+  if (
+    data.files.length > 0 ||
+    Array.from(data.items).some((item) => item.kind === 'file') ||
+    data.types.includes('Files') ||
+    data.types.includes('public.file-url')
+  ) {
+    return true
+  }
+  // String contents may be hidden until drop. Only claim a string-only transfer
+  // when it exposes a local file URL; ordinary text and web links stay native.
+  return [data.getData('text/uri-list'), data.getData('text/plain')].some(
+    (value) => value.split(/\r?\n/).some((line) => /^file:/i.test(line.trim())),
+  )
+}
+
+function fileFromDrop(data: DataTransfer): File | null {
+  const file = data.files.item?.(0) ?? data.files[0]
+  if (file) return file
+  for (const item of Array.from(data.items)) {
+    if (item.kind !== 'file') continue
+    const file = item.getAsFile()
+    if (file) return file
+  }
+  return null
+}
+
 function clipboardImagesSupported() {
   return (
     typeof navigator !== 'undefined' &&
@@ -383,25 +410,58 @@ export function Remover({
   useEffect(() => {
     let depth = 0
     const onEnter = (event: DragEvent) => {
-      if (!event.dataTransfer?.types.includes('Files')) return
+      if (!event.dataTransfer || !isFileTransfer(event.dataTransfer)) return
       event.preventDefault()
       depth += 1
       setIsDragging(true)
     }
     const onOver = (event: DragEvent) => {
-      if (!event.dataTransfer?.types.includes('Files')) return
+      const data = event.dataTransfer
+      if (!data) return
+      const fileTransfer = isFileTransfer(data)
+      // Protected strings are unreadable until drop. Admit potential file URLs
+      // without showing the image overlay or consuming an ordinary text/link
+      // drop. Editable controls already accept text with their native behavior.
+      const protectedString =
+        !isEditableTarget(event.target) &&
+        (data.types.includes('text/uri-list') ||
+          data.types.includes('text/plain'))
+      if (!fileTransfer && !protectedString) return
       event.preventDefault()
+      if (fileTransfer) data.dropEffect = 'copy'
     }
     const onLeave = () => {
       depth = Math.max(0, depth - 1)
       if (depth === 0) setIsDragging(false)
     }
     const onDrop = (event: DragEvent) => {
-      if (!event.dataTransfer?.files.length) return
-      event.preventDefault()
       depth = 0
       setIsDragging(false)
-      selectFiles(event.dataTransfer.files, 'drop')
+      const data = event.dataTransfer
+      if (!data) return
+      const fileTransfer = isFileTransfer(data)
+      const protectedString =
+        !isEditableTarget(event.target) &&
+        (data.types.includes('text/uri-list') ||
+          data.types.includes('text/plain'))
+      const unreadableProtectedString =
+        protectedString &&
+        [data.getData('text/uri-list'), data.getData('text/plain')].every(
+          (value) => value.length === 0,
+        )
+      if (!fileTransfer && !unreadableProtectedString) return
+      // Photos can expose a file URL without granting access to the file.
+      // Cancel navigation even when there is no readable file in the drop.
+      event.preventDefault()
+      const file = fileFromDrop(data)
+      if (file) {
+        void process(file, 'drop')
+      } else {
+        notify(
+          'That drop did not include a readable file. Export the photo from Photos, then choose or drop the exported file.',
+          'error',
+        )
+      }
     }
     window.addEventListener('dragenter', onEnter)
     window.addEventListener('dragover', onOver)
@@ -413,7 +473,7 @@ export function Remover({
       window.removeEventListener('dragleave', onLeave)
       window.removeEventListener('drop', onDrop)
     }
-  }, [selectFiles])
+  }, [process, notify])
 
   // Paste anywhere on the page.
   useEffect(() => {
@@ -759,7 +819,11 @@ export function Remover({
       <p className="sr-only" aria-live="polite">
         {announcement}
       </p>
-      <Toast message={toast} onDone={dismissToast} />
+      <Toast
+        message={toast}
+        onDone={dismissToast}
+        durationMs={toast?.tone === 'error' ? 6000 : 2200}
+      />
       <div
         aria-hidden={!pickerOffscreen}
         className={cn(

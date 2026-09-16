@@ -12,7 +12,17 @@ import {
   prepareImageForInference,
   validateImage,
 } from './image'
-import { createMaskRefinement } from './refinement'
+import {
+  detectEngineChoices,
+  engineKey,
+  LITE_MODEL,
+  modelUrl,
+  type EngineChoice,
+  type ExecutionProvider,
+  type ModelDefinition,
+  type RemovalModel,
+} from './models'
+import { createMaskRefinement, type InferenceMask } from './refinement'
 import { canUseOnnxWebGpu, shouldUseSingleThreadedWasm } from './runtime'
 
 export {
@@ -26,7 +36,7 @@ export {
 } from './image'
 
 export type RemovalQuality = 'fast' | 'quality'
-export type ExecutionProvider = 'webgpu' | 'wasm'
+export type { ExecutionProvider, RemovalModel } from './models'
 
 export interface RemovalProgress {
   stage: 'preparing' | 'downloading' | 'processing' | 'finishing'
@@ -46,6 +56,7 @@ export interface BackgroundRemovalResult {
   width: number
   height: number
   provider: ExecutionProvider
+  model: RemovalModel
   quality: RemovalQuality
   durationMs: number
 }
@@ -55,13 +66,8 @@ export interface BrowserCapabilities {
   wasm: boolean
 }
 
-const MODEL_ID = 'studioludens/birefnet-lite-512'
-const MODEL_REVISION = '4a3c40c36c94093cc1e724d9ea428b8fa4b57dc7'
-const MODEL_BASE_URL = `https://huggingface.co/${MODEL_ID}/resolve/${MODEL_REVISION}`
-const WEBGPU_FAILURE_KEY = `bg0:webgpu-failure:${MODEL_REVISION}`
-// Size of onnx/model_fp16.onnx at the pinned revision, used to weight progress
-// when a response arrives without a Content-Length.
-const MODEL_BYTES = 98_484_532
+// Retry GPUs rejected by the older runtime after moving to Transformers.js 4.
+const WEBGPU_FAILURE_KEY = `bg0:webgpu-failure:v4:${LITE_MODEL.revision}`
 
 type TensorLike = {
   data: Float32Array | Uint8Array | Int32Array | BigInt64Array
@@ -70,12 +76,19 @@ type TensorLike = {
 }
 
 type ModelOutput = { logits?: TensorLike; output_image?: TensorLike }
-type ModelRunner = (input: Record<string, unknown>) => Promise<ModelOutput>
+type ModelRunner = {
+  (input: Record<string, unknown>): Promise<ModelOutput>
+  dispose: () => Promise<unknown>
+}
 type ProcessorRunner = (image: unknown) => Promise<Record<string, unknown>>
-type Engine = {
+type Engine = EngineChoice & {
   model: ModelRunner
   processor: ProcessorRunner
-  provider: ExecutionProvider
+}
+type EngineLease = {
+  engine: Engine
+  retire: () => Promise<void>
+  release: () => Promise<void>
 }
 
 type EngineProgress = { progress: number; initializing: boolean }
@@ -83,9 +96,14 @@ type EngineLoad = {
   promise: Promise<Engine>
   listeners: Set<(progress: number, initializing: boolean) => void>
   progress?: EngineProgress
+  users: number
+  retired: boolean
+  disposal?: Promise<void>
 }
 
-const engineLoads: Partial<Record<ExecutionProvider, EngineLoad>> = {}
+const engineLoads = new Map<string, EngineLoad>()
+const failedEngines = new Set<string>()
+let detectedChoices: Promise<EngineChoice[]> | undefined
 let webgpuUsableForSession = true
 
 export function getBrowserCapabilities(): BrowserCapabilities {
@@ -99,8 +117,12 @@ export function getBrowserCapabilities(): BrowserCapabilities {
 }
 
 export function clearModelCache(): void {
-  engineLoads.webgpu = undefined
-  engineLoads.wasm = undefined
+  for (const load of engineLoads.values()) {
+    void retireEngine(load)
+  }
+  engineLoads.clear()
+  failedEngines.clear()
+  detectedChoices = undefined
   webgpuUsableForSession = true
   try {
     localStorage.removeItem(WEBGPU_FAILURE_KEY)
@@ -115,11 +137,15 @@ export function clearModelCache(): void {
  * Concurrent calls share the same initialization work with removeBackground.
  */
 export async function prepareBackgroundRemoval(): Promise<ExecutionProvider> {
-  const engine = await getPreferredEngine(
-    getPreferredProvider(),
+  const lease = await getPreferredEngine(
+    await getPreferredChoices(),
     () => undefined,
   )
-  return engine.provider
+  try {
+    return lease.engine.provider
+  } finally {
+    await lease.release()
+  }
 }
 
 export async function removeBackground(
@@ -128,26 +154,31 @@ export async function removeBackground(
 ): Promise<BackgroundRemovalResult> {
   const startedAt = performance.now()
   const quality = options.quality ?? 'fast'
-  const notify = options.onProgress ?? (() => undefined)
+  let reportedProgress = 0
+  const notify = (progress: RemovalProgress) => {
+    reportedProgress = Math.max(reportedProgress, progress.progress)
+    options.onProgress?.({ ...progress, progress: reportedProgress })
+  }
   let decodedImage: ImageBitmap | undefined
+  let lease: EngineLease | undefined
 
   try {
     throwIfCancelled(options.signal)
     const format = await validateImage(input)
     notify({ stage: 'preparing', progress: 0.03, message: 'Preparing image…' })
+    const choices = await getPreferredChoices()
+    throwIfCancelled(options.signal)
     const preparedImage = await prepareImageForInference(
       input,
-      512,
-      512,
+      choices[0].definition.inputSize,
+      choices[0].definition.inputSize,
       format,
     )
     throwIfCancelled(options.signal)
 
-    const preferredProvider = getPreferredProvider()
-    const modelIsCached = await isModelCached()
-    let engine = await getPreferredEngine(
-      preferredProvider,
-      (progress, initializing) => {
+    lease = await getPreferredEngine(
+      choices,
+      (progress, initializing, modelIsCached) => {
         notify({
           stage: modelIsCached || initializing ? 'preparing' : 'downloading',
           progress: 0.08 + progress * 0.58,
@@ -158,7 +189,9 @@ export async function removeBackground(
               : 'Downloading local model…',
         })
       },
+      options.signal,
     )
+    let engine = lease.engine
     throwIfCancelled(options.signal)
 
     notify({
@@ -173,39 +206,57 @@ export async function removeBackground(
       preparedImage.height,
       4,
     )
-    let inference = await runInference(engine, source)
-
-    if (
-      engine.provider === 'webgpu' &&
-      (!inference.inspection.valid || !inference.inspection.hasForegroundSignal)
-    ) {
-      rememberWebgpuFailure()
+    let inference: InferenceMask
+    while (true) {
       throwIfCancelled(options.signal)
-      notify({
-        stage: 'downloading',
-        progress: 0.74,
-        message: 'Switching to compatibility mode…',
-      })
-      engine = await getEngine('wasm', (progress, initializing) => {
+      try {
+        inference = await inferMask(engine, source)
+        if (
+          !inference.inspection.valid ||
+          (engine.provider === 'webgpu' &&
+            !inference.inspection.hasForegroundSignal)
+        ) {
+          throw new Error('The model returned an invalid alpha mask')
+        }
+        break
+      } catch (error) {
+        throwIfCancelled(options.signal)
+        if (
+          engine.provider === 'wasm' &&
+          engine.definition.name === 'birefnet-lite'
+        )
+          throw error
+        rememberEngineFailure(engine)
+        await lease.retire()
+        await lease.release()
+        lease = undefined
+        throwIfCancelled(options.signal)
         notify({
-          stage: initializing ? 'preparing' : 'downloading',
-          progress: 0.74 + progress * 0.14,
-          message: initializing
-            ? 'Starting compatibility mode…'
-            : 'Preparing compatibility mode…',
+          stage: 'preparing',
+          progress: 0.74,
+          message: 'Switching to a compatible model…',
         })
-      })
-      throwIfCancelled(options.signal)
-      notify({
-        stage: 'processing',
-        progress: 0.89,
-        message: 'Retrying background removal…',
-      })
-      inference = await runInference(engine, source)
-    }
-
-    if (!inference.inspection.valid) {
-      throw new Error('The model returned an invalid alpha mask')
+        lease = await getPreferredEngine(
+          choices,
+          (progress, initializing, cached) => {
+            notify({
+              stage: initializing || cached ? 'preparing' : 'downloading',
+              progress: 0.74 + progress * 0.14,
+              message: initializing
+                ? 'Starting compatibility mode…'
+                : 'Preparing compatibility mode…',
+            })
+          },
+          options.signal,
+        )
+        engine = lease.engine
+        throwIfCancelled(options.signal)
+        notify({
+          stage: 'processing',
+          progress: 0.89,
+          message: 'Retrying background removal…',
+        })
+      }
     }
 
     const refinement = await createMaskRefinement({
@@ -222,7 +273,7 @@ export async function removeBackground(
           message: 'Refining fine details…',
         })
       },
-      infer: (croppedSource) => runInference(engine, croppedSource),
+      infer: (croppedSource) => inferMask(engine, croppedSource),
     })
 
     notify({ stage: 'finishing', progress: 0.92, message: 'Finishing edges…' })
@@ -248,6 +299,7 @@ export async function removeBackground(
       width: preparedImage.sourceWidth,
       height: preparedImage.sourceHeight,
       provider: engine.provider,
+      model: engine.definition.name,
       quality,
       durationMs: Math.round(performance.now() - startedAt),
     }
@@ -255,34 +307,54 @@ export async function removeBackground(
     throw normalizeError(error)
   } finally {
     decodedImage?.close()
+    await lease?.release()
   }
 }
 
 async function getPreferredEngine(
-  preferred: ExecutionProvider,
-  onDownload: (progress: number, initializing: boolean) => void,
-): Promise<Engine> {
-  try {
-    return await getEngine(preferred, onDownload)
-  } catch (error) {
-    if (preferred === 'webgpu') {
-      rememberWebgpuFailure()
-      try {
-        return await getEngine('wasm', onDownload)
-      } catch (fallbackError) {
-        throw modelLoadError(fallbackError)
+  choices: EngineChoice[],
+  onDownload: (
+    progress: number,
+    initializing: boolean,
+    cached: boolean,
+  ) => void,
+  signal?: AbortSignal,
+): Promise<EngineLease> {
+  let lastError: unknown
+  for (const choice of choices) {
+    throwIfCancelled(signal)
+    if (failedEngines.has(engineKey(choice))) continue
+    const cached = await isModelCached(choice.definition)
+    throwIfCancelled(signal)
+    if (failedEngines.has(engineKey(choice))) continue
+    try {
+      return await getEngine(choice, (progress, initializing) => {
+        onDownload(progress, initializing, cached)
+      })
+    } catch (error) {
+      lastError = error
+      // Leave the final lite WASM path retryable after a transient error.
+      if (
+        choice.provider === 'webgpu' ||
+        choice.definition.name === 'birefnet'
+      ) {
+        rememberEngineFailure(choice)
       }
     }
-    throw modelLoadError(error)
   }
+  throw modelLoadError(lastError)
 }
 
-function getPreferredProvider(): ExecutionProvider {
-  return getBrowserCapabilities().webgpu && canTryWebgpu() ? 'webgpu' : 'wasm'
+async function getPreferredChoices(): Promise<EngineChoice[]> {
+  detectedChoices ??= detectEngineChoices()
+  const choices = await detectedChoices
+  return choices.filter(
+    (choice) => choice.provider !== 'webgpu' || canTryWebgpu(),
+  )
 }
 
-async function isModelCached(): Promise<boolean> {
-  const url = `${MODEL_BASE_URL}/onnx/model_fp16.onnx`
+async function isModelCached(model: ModelDefinition): Promise<boolean> {
+  const url = modelUrl(model)
   try {
     if (typeof caches !== 'undefined') {
       return Boolean(await (await caches.open('transformers-cache')).match(url))
@@ -294,6 +366,27 @@ async function isModelCached(): Promise<boolean> {
     // A blocked cache should not prevent local inference.
   }
   return false
+}
+
+function rememberEngineFailure(choice: EngineChoice): void {
+  failedEngines.add(engineKey(choice))
+  // A large model failing must not disable the smaller model's GPU path.
+  if (
+    choice.provider === 'webgpu' &&
+    choice.definition.name === 'birefnet-lite'
+  ) {
+    rememberWebgpuFailure()
+  }
+}
+
+async function retireEngine(load: EngineLoad): Promise<void> {
+  load.retired = true
+  if (load.users > 0) return
+  load.disposal ??= load.promise
+    .then((engine) => engine.model.dispose())
+    .then(() => undefined)
+    .catch(() => undefined)
+  await load.disposal
 }
 
 function canTryWebgpu(): boolean {
@@ -315,36 +408,58 @@ function rememberWebgpuFailure(): void {
 }
 
 async function getEngine(
-  provider: ExecutionProvider,
+  choice: EngineChoice,
   onDownload: (progress: number, initializing: boolean) => void,
-): Promise<Engine> {
-  let load = engineLoads[provider]
+): Promise<EngineLease> {
+  const key = engineKey(choice)
+  let load = engineLoads.get(key)
   if (!load) {
     const listeners: EngineLoad['listeners'] = new Set()
     let currentLoad: EngineLoad
-    const promise = loadEngine(provider, (progress, initializing) => {
-      if (engineLoads[provider] !== currentLoad) return
+    const promise = loadEngine(choice, (progress, initializing) => {
+      if (engineLoads.get(key) !== currentLoad) return
       currentLoad.progress = { progress, initializing }
       for (const listener of currentLoad.listeners) {
         notifyEngineProgress(listener, currentLoad.progress)
       }
     })
-    currentLoad = { promise, listeners }
+    currentLoad = { promise, listeners, users: 0, retired: false }
     load = currentLoad
-    engineLoads[provider] = load
+    engineLoads.set(key, load)
   }
 
-  load.listeners.add(onDownload)
+  // Reserve before awaiting initialization or notifying callers: a cache reset
+  // must preserve pending acquisitions as well as active inference/refinement.
+  const reservedLoad = load
+  reservedLoad.users++
+  let released = false
+  const release = async () => {
+    if (released) return
+    released = true
+    reservedLoad.users--
+    if (reservedLoad.retired) await retireEngine(reservedLoad)
+  }
+  reservedLoad.listeners.add(onDownload)
   try {
-    if (load.progress) notifyEngineProgress(onDownload, load.progress)
-    const engine = await load.promise
-    if (engineLoads[provider] === load) load.progress = undefined
-    return engine
+    if (reservedLoad.progress) {
+      notifyEngineProgress(onDownload, reservedLoad.progress)
+    }
+    const engine = await reservedLoad.promise
+    if (engineLoads.get(key) === reservedLoad) reservedLoad.progress = undefined
+    return {
+      engine,
+      retire: () => {
+        if (engineLoads.get(key) === reservedLoad) engineLoads.delete(key)
+        return retireEngine(reservedLoad)
+      },
+      release,
+    }
   } catch (error) {
-    if (engineLoads[provider] === load) engineLoads[provider] = undefined
+    if (engineLoads.get(key) === reservedLoad) engineLoads.delete(key)
+    await release()
     throw error
   } finally {
-    load.listeners.delete(onDownload)
+    reservedLoad.listeners.delete(onDownload)
   }
 }
 
@@ -367,14 +482,15 @@ function modelLoadError(error: unknown) {
   )
 }
 
-async function runInference(engine: Engine, source: unknown) {
+async function inferMask(engine: Engine, source: unknown) {
   const processed = await engine.processor(source)
   const pixelValues = processed.pixel_values
   if (!pixelValues) throw new Error('Image preprocessing failed')
   const output = await engine.model({ input_image: pixelValues })
   const tensor = output.logits ?? output.output_image
   if (!tensor) throw new Error('The model returned no alpha mask')
-  const alpha = (output.logits ? tensor.sigmoid() : tensor).data
+  // Both exports emit logits, including the full model's output_image tensor.
+  const alpha = tensor.sigmoid().data
   if (!(alpha instanceof Float32Array)) {
     throw new Error('The model returned an invalid alpha mask')
   }
@@ -399,6 +515,7 @@ async function runInference(engine: Engine, source: unknown) {
  * as the bulk of the work, and never lets the figure go backwards.
  */
 function createDownloadTracker(
+  modelBytes: number,
   onDownload: (progress: number, initializing: boolean) => void,
 ) {
   const files = new Map<string, { loaded: number; total: number }>()
@@ -406,7 +523,7 @@ function createDownloadTracker(
 
   const expectedTotal = (file: string, total: number | undefined) => {
     if (total && total > 0) return total
-    return file.endsWith('.onnx') ? MODEL_BYTES : 4096
+    return file.endsWith('.onnx') ? modelBytes : 4096
   }
 
   const report = () => {
@@ -420,7 +537,7 @@ function createDownloadTracker(
     }
     // Until the model file is announced the small config files would read
     // as "done"; hold the bar back so it only moves forward.
-    if (!sawModel) total += MODEL_BYTES
+    if (!sawModel) total += modelBytes
     const value = total > 0 ? loaded / total : 0
     if (value > reported) {
       reported = value
@@ -462,9 +579,10 @@ function createDownloadTracker(
 }
 
 async function loadEngine(
-  provider: ExecutionProvider,
+  choice: EngineChoice,
   onDownload: (progress: number, initializing: boolean) => void,
 ): Promise<Engine> {
+  const { provider, definition } = choice
   const { AutoModel, AutoProcessor, env } = await import(
     '@huggingface/transformers'
   )
@@ -488,20 +606,20 @@ async function loadEngine(
     env.useBrowserCache = false
   }
 
-  const progressCallback = createDownloadTracker(onDownload)
+  const progressCallback = createDownloadTracker(definition.bytes, onDownload)
 
-  const processor = (await AutoProcessor.from_pretrained(MODEL_ID, {
-    revision: MODEL_REVISION,
+  const processor = (await AutoProcessor.from_pretrained(definition.id, {
+    revision: definition.revision,
     progress_callback: progressCallback,
   })) as unknown as ProcessorRunner
 
-  const model = (await AutoModel.from_pretrained(MODEL_ID, {
-    revision: MODEL_REVISION,
+  const model = (await AutoModel.from_pretrained(definition.id, {
+    revision: definition.revision,
     device: provider,
     dtype: 'fp16',
     progress_callback: progressCallback,
   })) as unknown as ModelRunner
-  return { model, processor, provider }
+  return { model, processor, ...choice }
 }
 
 function throwIfCancelled(signal?: AbortSignal): void {

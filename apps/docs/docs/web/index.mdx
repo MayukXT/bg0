@@ -17,7 +17,7 @@ Drag a file anywhere on the page, paste an image from the clipboard, or choose o
 
 ## First load
 
-The WebGPU model is roughly 94 MB and downloads on the first removal. It is stored in the browser cache, so later sessions normally read it from local storage instead of downloading it again. Reloading still requires ONNX initialization and copying weights to the GPU, which can take a few seconds. Private browsing, cleared site data, or browser storage eviction can trigger another download.
+BG0 selects the model automatically: full BiRefNet is roughly 452 MiB, and the lite fallback is roughly 94 MiB. The selected model downloads on the first removal. It is stored in the browser cache, so later sessions normally read it from local storage instead of downloading it again. Reloading still requires ONNX initialization and copying weights to the GPU, which can take a few seconds. Private browsing, cleared site data, or browser storage eviction can trigger another download.
 
 ## Compare view
 
@@ -33,4 +33,4 @@ Copying an image needs a secure page. That is always true on bg0.dev over HTTPS.
 
 ## Hardware
 
-BG0 prefers WebGPU and falls back to WebAssembly. A laptop with WebGPU removes a background in one to three seconds. The WASM path works everywhere but can take ten seconds or more on a large photo.
+BG0 uses browser hardware hints to choose whether to try full BiRefNet or the smaller BiRefNet-lite first. Those hints cannot guarantee compatibility. If the selected model cannot load or run, BG0 attempts the lite model and WebAssembly fallbacks automatically. Processing time varies by device. See the browser library's [selection rules and verification scope](/library#automatic-model-selection) for the thresholds and environments tested.

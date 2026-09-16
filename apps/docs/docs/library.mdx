@@ -6,7 +6,7 @@ sidebar:
   icon: package
 ---
 
-`@bg0/browser` is the engine behind bg0.dev. It loads the BiRefNet-lite ONNX model, runs it with WebGPU or WebAssembly, and returns a transparent PNG. No server, no API key.
+`@bg0/browser` is the engine behind bg0.dev. It selects a BiRefNet ONNX model for the available hardware, runs it with WebGPU or WebAssembly, and returns a transparent PNG. No server, no API key.
 
 ## Install
 
@@ -29,6 +29,35 @@ const url = URL.createObjectURL(result.blob)
 
 `file` is any `Blob`, such as a `File` from an input or a drop event. PNG, JPG, WebP, HEIC, and HEIF up to 40 MB are accepted. HEIF still collections use their designated primary image; HEIC/HEIF sequences are not supported.
 
+## Automatic model selection
+
+The engine uses hardware hints to decide which model to attempt first. It tries
+full BiRefNet on Chromium WebGPU adapters reporting fp16 shaders,
+at least a 256 MiB buffer limit and a 128 MiB storage binding
+limit. A reported device-memory hint below 4 GiB keeps the lite model; browsers
+that omit that hint remain eligible for full BiRefNet. GPU brand and CPU count
+do not restrict GPU selection. Without an eligible fp16 GPU, browsers reporting
+at least four logical CPU cores attempt full BiRefNet on WASM unless they report less than
+4 GiB of memory or need the iOS single-threaded compatibility path. Other
+CPU-only browsers attempt lite. These thresholds are selection heuristics,
+not a guarantee that a device can run the selected model. Both exports take
+512px input; the full model uses the larger Swin-L backbone.
+
+If loading or running the full model fails, the engine retries with lite on
+the same provider, then lite on WASM. Failed full-model and GPU combinations
+are skipped for the current page session.
+`prepareBackgroundRemoval()` uses the same selection and shares initialization
+with removal calls. The `quality` option controls mask refinement separately.
+
+### Verification scope
+
+Local verification exercised full and lite BiRefNet with WebGPU and WASM on an
+Apple M4 Max with 64 GiB RAM, macOS, and Chrome for Testing 153. WebGPU used the
+physical Apple Metal adapter. Low-memory and CPU-only selection were tested by
+overriding browser hints on that same Mac; they do not establish support on
+physical low-memory devices. Windows, Android, iOS, Safari, Firefox, and the
+deployed origin have not been verified for this model-selection change.
+
 ## Options
 
 | Option | Type | Default | Meaning |
@@ -45,6 +74,7 @@ const url = URL.createObjectURL(result.blob)
 | `sourceBlob` | `Blob \| undefined` | Browser-displayable PNG of a HEIC/HEIF source; omitted for natively displayable formats |
 | `width`, `height` | `number` | Pixel size of the output |
 | `provider` | `'webgpu' \| 'wasm'` | Which backend ran the model |
+| `model` | `'birefnet' \| 'birefnet-lite'` | The model that produced the result, including any fallback |
 | `quality` | `'fast' \| 'quality'` | Which mask smoothing level was used |
 | `durationMs` | `number` | Wall time for the whole call |
 
@@ -74,4 +104,4 @@ Use this to warn users on the WASM path that a large photo will take longer.
 
 ## Model caching
 
-The model is fetched from the Hugging Face hub and kept in browser storage. Calls in the same page reuse the initialized model. After a reload, BG0 reuses the stored files but still initializes ONNX and uploads weights to WebGPU. Browsers may evict the files under storage pressure. `clearModelCache()` forces a download on the next call.
+The selected model (about 452 MiB for full BiRefNet or 94 MiB for lite) is fetched from the Hugging Face hub and kept in browser storage. Calls in the same page reuse the initialized model. After a reload, BG0 reuses the stored files but still initializes ONNX and uploads weights to WebGPU. Browsers may evict the files under storage pressure. `clearModelCache()` resets hardware selection and failure state and clears the IndexedDB fallback cache. It releases engines after any pending preparation or removal calls finish, including refinement. Files already in the browser Cache API may still be reused.

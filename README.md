@@ -10,7 +10,7 @@ PNG without uploading the source image.
 
 - Images and derived pixels stay in browser memory.
 - There is no account, API key, server inference, billing, or usage limit.
-- The browser downloads a pinned BiRefNet-lite ONNX model and caches it locally.
+- The browser downloads a pinned BiRefNet ONNX model selected for the available hardware and caches it locally.
 - `@bg0/browser` can add the same private flow to another web application.
 
 ## Quick start

@@ -1,5 +1,27 @@
 # Third-party notices
 
+## BiRefNet browser models
+
+BG0 downloads one of two MIT-licensed ONNX exports. The weights are not bundled
+in this repository or package; their original license applies when downloaded
+and cached in the browser.
+
+- Full BiRefNet: `naddy24/birefnet-512-webgpu`, revision
+  `ca02a86c094927479e2be583abe87f8ea73fcfda`. This browser-compatible 512px
+  Swin-L export derives from `onnx-community/BiRefNet_512x512-ONNX` and
+  `ZhengPeng7/BiRefNet_512x512`; empty ScatterND operations were removed.
+- Lite fallback: `studioludens/birefnet-lite-512`, revision
+  `4a3c40c36c94093cc1e724d9ea428b8fa4b57dc7`, derived from
+  `ZhengPeng7/BiRefNet_lite`.
+
+Model cards, licenses, attribution, limitations, and citation:
+
+- https://huggingface.co/naddy24/birefnet-512-webgpu
+- https://huggingface.co/onnx-community/BiRefNet_512x512-ONNX
+- https://huggingface.co/ZhengPeng7/BiRefNet_512x512
+- https://huggingface.co/studioludens/birefnet-lite-512
+- https://github.com/ZhengPeng7/BiRefNet
+
 ## heic-to 1.5.2
 
 `@bg0/browser` ships a minimally modified `heic-to` 1.5.2 browser module as
