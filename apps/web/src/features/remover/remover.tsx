@@ -68,6 +68,18 @@ export function warmBackgroundRemovalModel(
   prepare = prepareBackgroundRemoval,
 ): void {
   if (isIPhone(userAgent)) return
+  const connection = (
+    navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string }
+    }
+  ).connection
+  if (
+    connection?.saveData ||
+    connection?.effectiveType === '2g' ||
+    connection?.effectiveType === 'slow-2g'
+  ) {
+    return
+  }
   void prepare().catch(() => {
     // The normal processing path retries and presents a useful error if needed.
   })
@@ -807,7 +819,10 @@ export function Remover({
         type="file"
         accept={IMAGE_ACCEPT_ATTRIBUTE}
         className="sr-only"
-        onChange={(event) => selectFiles(event.target.files, 'picker')}
+        onChange={(event) => {
+          selectFiles(event.target.files, 'picker')
+          event.target.value = ''
+        }}
         aria-label="Choose a photo"
       />
       <input
@@ -815,7 +830,10 @@ export function Remover({
         type="file"
         accept={IMAGE_ACCEPT_ATTRIBUTE}
         className="sr-only"
-        onChange={(event) => selectFiles(event.target.files, 'picker')}
+        onChange={(event) => {
+          selectFiles(event.target.files, 'picker')
+          event.target.value = ''
+        }}
         aria-label="Choose an image file to remove its background"
       />
       <p className="sr-only" aria-live="polite">

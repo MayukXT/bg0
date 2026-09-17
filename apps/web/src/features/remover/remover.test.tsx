@@ -59,6 +59,39 @@ describe('iPhone memory warning', () => {
     expect(prepare).toHaveBeenCalledTimes(1)
   })
 
+  test('does not warm the model when saveData or slow connection is active', () => {
+    const prepare = mock(() => Promise.resolve('wasm' as const))
+    const originalConnection = (navigator as Navigator & { connection?: unknown }).connection
+
+    try {
+      Object.defineProperty(navigator, 'connection', {
+        configurable: true,
+        value: { saveData: true },
+      })
+      warmBackgroundRemovalModel(MAC_SAFARI_USER_AGENT, prepare)
+      expect(prepare).not.toHaveBeenCalled()
+
+      Object.defineProperty(navigator, 'connection', {
+        configurable: true,
+        value: { saveData: false, effectiveType: '2g' },
+      })
+      warmBackgroundRemovalModel(MAC_SAFARI_USER_AGENT, prepare)
+      expect(prepare).not.toHaveBeenCalled()
+
+      Object.defineProperty(navigator, 'connection', {
+        configurable: true,
+        value: { saveData: false, effectiveType: '4g' },
+      })
+      warmBackgroundRemovalModel(MAC_SAFARI_USER_AGENT, prepare)
+      expect(prepare).toHaveBeenCalledTimes(1)
+    } finally {
+      Object.defineProperty(navigator, 'connection', {
+        configurable: true,
+        value: originalConnection,
+      })
+    }
+  })
+
   test('renders only for an iPhone browser', async () => {
     const originalUserAgent = navigator.userAgent
 
@@ -197,6 +230,22 @@ describe('Remover image pickers', () => {
     )
   })
 
+  test('clears file input value on selection to allow picking the same file again', () => {
+    const view = render(<Remover />)
+    const fileInput = view.getByLabelText(
+      'Choose an image file to remove its background',
+    ) as HTMLInputElement
+    const photoInput = view.getByLabelText('Choose a photo') as HTMLInputElement
+
+    selectFile(view, new File(['test'], 'image.png', { type: 'image/png' }))
+    expect(fileInput.value).toBe('')
+
+    const transfer = new DataTransfer()
+    transfer.items.add(new File(['test'], 'photo.png', { type: 'image/png' }))
+    fireEvent.change(photoInput, { target: { files: transfer.files } })
+    expect(photoInput.value).toBe('')
+  })
+
   test('does not install a result that resolves after reset', async () => {
     const urls = trackObjectUrls()
     const request = deferred<BackgroundRemovalResult>()
@@ -232,16 +281,29 @@ describe('Remover image pickers', () => {
     )
 
     try {
-      const view = render(<Remover removeBackgroundImpl={remove} />)
+      const view = render(
+        <Remover
+          removeBackgroundImpl={remove}
+          waitForPaintImpl={() => Promise.resolve()}
+        />,
+      )
       selectFile(view, new File(['one'], 'one.heic', { type: 'image/heic' }))
+      await act(async () => {
+        await Promise.resolve()
+      })
       selectFile(view, new File(['two'], 'two.heic', { type: 'image/heic' }))
+      await act(async () => {
+        await Promise.resolve()
+      })
 
       expect(urls.revoked).toEqual(['blob:test-1'])
       await act(async () => first.resolve(resultWithSource()))
       expect(urls.created).toHaveLength(2)
 
       await act(async () => second.resolve(resultWithSource()))
-      expect(view.getByText(/Background removed in/)).toBeTruthy()
+      await waitFor(() => {
+        expect(view.getByText(/Background removed in/)).toBeTruthy()
+      })
       expect(urls.created).toHaveLength(4)
       expect(urls.revoked).toEqual(['blob:test-1', 'blob:test-2'])
 
